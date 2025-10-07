@@ -1,0 +1,49 @@
+# .gitignore
+
+# 可执行文件
+*.exe
+!caddy.exe
+
+# 数据目录
+data/
+!data/.gitkeep
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE 配置
+.vscode/
+.idea/
+*.iml
+
+# Windows 系统文件
+Thumbs.db
+Desktop.ini
+
+# Go 构建缓存
+*.test
+*.out
+
+# 依赖缓存
+vendor/
+
+# 多余的 README 文件
+README_*.md
+!README.md
+
+# 临时文档
+CHANGELOG.md
+FEATURES.md
+IMPROVEMENTS.md
+QUICKSTART.md
+SUMMARY.md
+TEST_*.md
+USAGE.md
+USER_GUIDE.md

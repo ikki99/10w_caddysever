@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caddy 管理器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f7fa; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .header h1 { color: #2c3e50; font-size: 24px; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px; }
+        .btn-primary { background: #409EFF; color: #fff; }
+        .btn-primary:hover { background: #66b1ff; }
+        .btn-success { background: #67C23A; color: #fff; }
+        .btn-danger { background: #F56C6C; color: #fff; }
+        .btn-warning { background: #E6A23C; color: #fff; }
+        input[type="text"], input[type="password"], select, textarea { width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; margin-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #606266; font-weight: 500; }
+        .site-list { list-style: none; }
+        .site-item { padding: 15px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; }
+        .site-item:last-child { border-bottom: none; }
+        #login-page, #setup-page, #dashboard, #system-info { display: none; }
+        .tabs { display: flex; border-bottom: 2px solid #e4e7ed; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .tab.active { color: #409EFF; border-bottom-color: #409EFF; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .info-item { padding: 15px; background: #f9f9f9; border-radius: 4px; border-left: 4px solid #409EFF; }
+        .info-item h4 { color: #606266; margin-bottom: 5px; }
+        .info-item p { font-size: 18px; color: #2c3e50; font-weight: 600; }
+        .env-status { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; }
+        .env-installed { background: #67C23A; color: white; }
+        .env-not-installed { background: #909399; color: white; }
+        .file-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .file-item:hover { background: #f5f7fa; }
+        .file-icon { margin-right: 10px; font-size: 20px; }
+        small { color: #909399; font-size: 12px; }
+        hr { margin: 20px 0; border: none; border-top: 1px solid #ebeef5; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+        .modal-content { position: relative; background: white; width: 90%; max-width: 600px; margin: 50px auto; padding: 30px; border-radius: 8px; max-height: 80vh; overflow-y: auto; }
+        .modal-close { position: absolute; right: 15px; top: 15px; font-size: 28px; cursor: pointer; color: #909399; }
+        .breadcrumb { padding: 10px; background: #f5f7fa; border-radius: 4px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>    <script>
+// app.js - Caddy Manager Frontend
+let currentPath = '';
+let currentEnvs = [];
+
+// 页面加载
+window.onload = function() {
+    loadSystemInfo();
+};
+
+// 加载系统信息
+async function loadSystemInfo() {
+    try {
+        const res = await fetch('/api/system/info');
+        const data = await res.json();
+        
+        document.getElementById('system-info').style.display = 'block';
+        
+        // 显示系统信息
+        const grid = document.getElementById('sys-info-grid');
+        grid.innerHTML = `
+            <div class="info-item">
+                <h4>操作系统</h4>
+                <p>${data.os}</p>
+            </div>
+            <div class="info-item">
+                <h4>架构</h4>
+                <p>${data.arch}</p>
+            </div>
+            <div class="info-item">
+                <h4>CPU核心</h4>
+                <p>${data.cpu_cores} 核</p>
+            </div>
+        `;
+        
+        // 显示环境信息
+        const envList = document.getElementById('env-info-list');
+        currentEnvs = data.environments;
+        envList.innerHTML = data.environments.map(env => `
+            <div class="file-item">
+                <div>
+                    <strong>${env.name}</strong>
+                    <span class="env-status ${env.installed ? 'env-installed' : 'env-not-installed'}">
+                        ${env.installed ? '已安装 ' + env.version : '未安装'}
+                    </span>
+                    ${env.path ? '<br><small>' + env.path + '</small>' : ''}
+                </div>
+            </div>
+        `).join('');
+        
+    } catch (err) {
+        console.error('加载系统信息失败:', err);
+    }
+}
+
+function continueToLogin() {
+    document.getElementById('system-info').style.display = 'none';
+    checkFirstRun();
+}
+
+async function checkFirstRun() {
+    const res = await fetch('/api/setup');
+    const data = await res.json();
+    if (data.firstRun) {
+        document.getElementById('setup-page').style.display = 'block';
+    } else {
+        document.getElementById('login-page').style.display = 'block';
+    }
+}
+
+// 设置表单
+document.getElementById('setup-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('setup-username').value;
+    const password = document.getElementById('setup-password').value;
+    const password2 = document.getElementById('setup-password2').value;
+    
+    if (password !== password2) {
+        alert('两次密码不一致');
+        return;
+    }
+
+    const res = await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+
+    if (res.ok) {
+        alert('设置完成，请登录');
+        document.getElementById('setup-page').style.display = 'none';
+        document.getElementById('login-page').style.display = 'block';
+    } else {
+        alert('设置失败');
+    }
+});
+
+// 登录表单
+document.getElementById('login-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value;
+    const password = document.getElementById('login-password').value;
+
+    const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+
+    if (res.ok) {
+        document.getElementById('login-page').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        loadSites();
+        checkCaddyStatus();
+        setInterval(checkCaddyStatus, 10000);
+    } else {
+        alert('登录失败');
+    }
+});
+
+// 加载站点列表
+async function loadSites() {
+    const res = await fetch('/api/sites');
+    const sites = await res.json();
+    const list = document.getElementById('site-list');
+    list.innerHTML = sites.map(site => `
+        <li class="site-item">
+            <div>
+                <strong>${site.domain}</strong>
+                <span style="color: #909399; margin-left: 10px;">
+                    ${site.type === 'proxy' ? '反向代理' : (site.type === 'php' ? 'PHP站点' : '静态站点')} → ${site.target}
+                </span>
+                ${site.environment ? '<br><small>环境: ' + site.environment + (site.php_version ? ' ' + site.php_version : '') + '</small>' : ''}
+            </div>
+            <div>
+                <button class="btn btn-danger" onclick="deleteSite(${site.id})">删除</button>
+            </div>
+        </li>
+    `).join('');
+}
+
+// 显示添加站点
+function showAddSite() {
+    document.getElementById('add-site-modal').style.display = 'block';
+}
+
+// 站点类型改变
+function onSiteTypeChange() {
+    const type = document.getElementById('site-type').value;
+    const targetLabel = document.getElementById('target-label');
+    const targetInput = document.getElementById('site-target');
+    const envGroup = document.getElementById('env-group');
+    
+    if (type === 'static') {
+        targetLabel.textContent = '网站目录';
+        targetInput.placeholder = 'C:\\www\\mysite';
+        envGroup.style.display = 'none';
+    } else if (type === 'proxy') {
+        targetLabel.textContent = '目标地址';
+        targetInput.placeholder = 'http://localhost:3000';
+        envGroup.style.display = 'none';
+    } else if (type === 'php') {
+        targetLabel.textContent = '网站目录';
+        targetInput.placeholder = 'C:\\www\\mysite';
+        envGroup.style.display = 'block';
+    }
+}
+
+// 提交添加站点
+async function submitAddSite() {
+    const domain = document.getElementById('site-domain').value;
+    const type = document.getElementById('site-type').value;
+    const target = document.getElementById('site-target').value;
+    const phpVersion = document.getElementById('php-version').value;
+    
+    if (!domain || !target) {
+        alert('请填写完整信息');
+        return;
+    }
+    
+    const site = {
+        domain,
+        type,
+        target,
+        ssl_enabled: true,
+        environment: type === 'php' ? 'php' : '',
+        php_version: type === 'php' ? phpVersion : ''
+    };
+    
+    const res = await fetch('/api/sites/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(site)
+    });
+    
+    if (res.ok) {
+        closeModal('add-site-modal');
+        loadSites();
+        alert('站点添加成功');
+    } else {
+        alert('添加失败');
+    }
+}
+
+// 删除站点
+function deleteSite(id) {
+    if (!confirm('确定删除吗？')) return;
+    fetch('/api/sites/delete?id=' + id, { method: 'POST' })
+        .then(() => loadSites());
+}
+
+// 切换标签
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById(tab + '-tab').classList.add('active');
+    
+    if (tab === 'files') loadFiles('');
+    if (tab === 'logs') refreshLogs();
+    if (tab === 'env') loadEnvs();
+    if (tab === 'settings') loadSettings();
+}
+
+// 文件管理
+async function loadFiles(path) {
+    currentPath = path;
+    const res = await fetch('/api/files/browse?path=' + encodeURIComponent(path));
+    const data = await res.json();
+    
+    document.getElementById('file-breadcrumb').textContent = '当前目录: ' + data.current_path;
+    
+    const browser = document.getElementById('file-browser');
+    let html = '';
+    
+    if (data.parent_path && data.parent_path !== data.current_path) {
+        html += `<div class="file-item" onclick="loadFiles('${data.parent_path}')">
+            <div><span class="file-icon">📁</span>..</div>
+        </div>`;
+    }
+    
+    html += data.files.map(f => `
+        <div class="file-item">
+            <div onclick="${f.is_dir ? 'loadFiles(\'' + f.path + '\')' : ''}">
+                <span class="file-icon">${f.is_dir ? '📁' : '📄'}</span>${f.name}
+                ${!f.is_dir ? '<small> (' + formatSize(f.size) + ')</small>' : ''}
+            </div>
+            <div>
+                ${!f.is_dir ? '<button class="btn btn-primary" onclick="downloadFile(\'' + f.path + '\', \'' + f.name + '\')">下载</button>' : ''}
+                <button class="btn btn-danger" onclick="deleteFile('${f.path}')">删除</button>
+            </div>
+        </div>
+    `).join('');
+    
+    browser.innerHTML = html;
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function uploadFileToPath() {
+    const file = document.getElementById('file-upload').files[0];
+    if (!file) {
+        alert('请选择文件');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', currentPath);
+    
+    fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData
+    }).then(() => {
+        loadFiles(currentPath);
+        document.getElementById('file-upload').value = '';
+    });
+}
+
+function createNewFolder() {
+    const name = prompt('请输入文件夹名称:');
+    if (!name) return;
+    
+    fetch('/api/files/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: currentPath, name })
+    }).then(() => loadFiles(currentPath));
+}
+
+function deleteFile(path) {
+    if (!confirm('确定删除吗？')) return;
+    fetch('/api/files/delete?path=' + encodeURIComponent(path), { method: 'POST' })
+        .then(() => loadFiles(currentPath));
+}
+
+function downloadFile(path, name) {
+    window.open('/api/files/download?path=' + encodeURIComponent(path), '_blank');
+}
+
+// 日志管理
+async function refreshLogs() {
+    const res = await fetch('/api/caddy/logs');
+    const data = await res.json();
+    document.getElementById('log-content').textContent = data.logs || '暂无日志';
+    document.getElementById('log-content').scrollTop = document.getElementById('log-content').scrollHeight;
+}
+
+// 环境管理
+async function loadEnvs() {
+    const list = document.getElementById('env-list');
+    list.innerHTML = currentEnvs.map(env => `
+        <div class="file-item">
+            <div>
+                <strong>${env.name}</strong>
+                <span class="env-status ${env.installed ? 'env-installed' : 'env-not-installed'}">
+                    ${env.installed ? '已安装 ' + env.version : '未安装'}
+                </span>
+            </div>
+            <div>
+                ${!env.installed ? '<button class="btn btn-warning" onclick="showEnvGuide(\'' + env.name.toLowerCase() + '\')">安装指南</button>' : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function showEnvGuide(env) {
+    const res = await fetch('/api/env/guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ env })
+    });
+    
+    const guide = await res.json();
+    document.getElementById('guide-title').textContent = guide.title;
+    document.getElementById('guide-steps').textContent = guide.steps;
+    document.getElementById('guide-download-btn').onclick = () => window.open(guide.download, '_blank');
+    document.getElementById('env-guide-modal').style.display = 'block';
+}
+
+// 设置管理
+async function loadSettings() {
+    const res = await fetch('/api/settings/get');
+    const data = await res.json();
+    document.getElementById('security-path').value = data.security_path || '';
+    document.getElementById('www-root').value = data.www_root || 'C:\\www';
+}
+
+async function saveSettings() {
+    const securityPath = document.getElementById('security-path').value;
+    const wwwRoot = document.getElementById('www-root').value;
+    
+    const res = await fetch('/api/settings/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ security_path: securityPath, www_root: wwwRoot })
+    });
+    
+    if (res.ok) {
+        alert('设置已保存！');
+    } else {
+        alert('保存失败');
+    }
+}
+
+async function changePassword() {
+    const username = document.getElementById('change-username').value;
+    const oldPassword = document.getElementById('old-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const newPassword2 = document.getElementById('new-password2').value;
+    
+    if (!username || !oldPassword || !newPassword) {
+        alert('请填写完整信息');
+        return;
+    }
+    
+    if (newPassword !== newPassword2) {
+        alert('两次新密码不一致');
+        return;
+    }
+    
+    const res = await fetch('/api/user/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, old_password: oldPassword, new_password: newPassword })
+    });
+    
+    if (res.ok) {
+        alert('密码修改成功，请重新登录');
+        logout();
+    } else {
+        const text = await res.text();
+        alert('修改失败: ' + text);
+    }
+}
+
+// Caddy 状态
+async function checkCaddyStatus() {
+    const res = await fetch('/api/caddy/status');
+    const data = await res.json();
+    document.getElementById('caddy-status').textContent = data.running ? '✅ Caddy 运行中' : '❌ Caddy 未运行';
+}
+
+// 退出登录
+function logout() {
+    fetch('/api/logout', { method: 'POST' })
+        .then(() => location.reload());
+}
+
+// 模态框
+function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+
+// 点击模态框外部关闭
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+
+    </script>
+</body>
+</html>
