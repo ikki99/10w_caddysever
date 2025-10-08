@@ -34,7 +34,7 @@
 
 ### 下载安装
 
-1. 从 [Releases](https://github.com/10w-server/caddy-manager/releases) 下载最新版本
+1. 从 [Releases](https://github.com/ikki99/10w_caddysever/releases)下载最新版本
 2. 解压到任意目录
 3. 右键 `caddy-manager.exe` → 选择"以管理员身份运行"
 
