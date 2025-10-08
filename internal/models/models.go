@@ -26,6 +26,7 @@ type Project struct {
 	ReverseProxyPath string `json:"reverse_proxy_path"`
 	ExtraHeaders     string `json:"extra_headers"`
 	Description      string `json:"description"`
+	UseIPv4          bool   `json:"use_ipv4"`
 }
 
 type Task struct {

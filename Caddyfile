@@ -1,0 +1,7 @@
+# Caddy 配置文件
+# 由 Caddy 管理器自动生成
+
+https://c808.333.606.f89f.top {
+    reverse_proxy * localhost:6481	
+}
+

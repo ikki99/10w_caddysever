@@ -26,7 +26,7 @@ var (
 // ProjectsHandler 获取项目列表
 func ProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
-	rows, err := db.Query("SELECT id, name, project_type, root_dir, exec_path, port, start_command, auto_start, status, domains, ssl_enabled, description FROM projects ORDER BY created_at DESC")
+	rows, err := db.Query("SELECT id, name, project_type, root_dir, exec_path, port, start_command, auto_start, status, domains, ssl_enabled, description, COALESCE(use_ipv4, 1) FROM projects ORDER BY created_at DESC")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -37,7 +37,7 @@ func ProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p models.Project
 		var execPath, startCmd, domains, desc *string
-		if err := rows.Scan(&p.ID, &p.Name, &p.ProjectType, &p.RootDir, &execPath, &p.Port, &startCmd, &p.AutoStart, &p.Status, &domains, &p.SSLEnabled, &desc); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.ProjectType, &p.RootDir, &execPath, &p.Port, &startCmd, &p.AutoStart, &p.Status, &domains, &p.SSLEnabled, &desc, &p.UseIPv4); err != nil {
 			continue
 		}
 		if execPath != nil {
@@ -71,11 +71,16 @@ func AddProjectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 默认使用 IPv4
+	if !p.UseIPv4 {
+		p.UseIPv4 = true
+	}
+
 	db := database.GetDB()
 	result, err := db.Exec(`INSERT INTO projects 
-		(name, project_type, root_dir, exec_path, port, start_command, auto_start, status, domains, ssl_enabled, ssl_email, reverse_proxy_path, extra_headers, description) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.ProjectType, p.RootDir, p.ExecPath, p.Port, p.StartCommand, p.AutoStart, "stopped", p.Domains, p.SSLEnabled, p.SSLEmail, p.ReverseProxyPath, p.ExtraHeaders, p.Description)
+		(name, project_type, root_dir, exec_path, port, start_command, auto_start, status, domains, ssl_enabled, ssl_email, reverse_proxy_path, extra_headers, description, use_ipv4) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.ProjectType, p.RootDir, p.ExecPath, p.Port, p.StartCommand, p.AutoStart, "stopped", p.Domains, p.SSLEnabled, p.SSLEmail, p.ReverseProxyPath, p.ExtraHeaders, p.Description, p.UseIPv4)
 	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -107,9 +112,9 @@ func UpdateProjectHandler(w http.ResponseWriter, r *http.Request) {
 
 	db := database.GetDB()
 	_, err := db.Exec(`UPDATE projects SET 
-		name=?, project_type=?, root_dir=?, exec_path=?, port=?, start_command=?, auto_start=?, domains=?, ssl_enabled=?, ssl_email=?, reverse_proxy_path=?, extra_headers=?, description=?, updated_at=CURRENT_TIMESTAMP 
+		name=?, project_type=?, root_dir=?, exec_path=?, port=?, start_command=?, auto_start=?, domains=?, ssl_enabled=?, ssl_email=?, reverse_proxy_path=?, extra_headers=?, description=?, use_ipv4=?, updated_at=CURRENT_TIMESTAMP 
 		WHERE id=?`,
-		p.Name, p.ProjectType, p.RootDir, p.ExecPath, p.Port, p.StartCommand, p.AutoStart, p.Domains, p.SSLEnabled, p.SSLEmail, p.ReverseProxyPath, p.ExtraHeaders, p.Description, p.ID)
+		p.Name, p.ProjectType, p.RootDir, p.ExecPath, p.Port, p.StartCommand, p.AutoStart, p.Domains, p.SSLEnabled, p.SSLEmail, p.ReverseProxyPath, p.ExtraHeaders, p.Description, p.UseIPv4, p.ID)
 	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -620,27 +625,28 @@ func isPortInUse(port int) bool {
 
 func generateCaddyfileForProjects() error {
 	db := database.GetDB()
-	rows, err := db.Query("SELECT domains, port, ssl_enabled, reverse_proxy_path, extra_headers FROM projects WHERE domains != ''")
+	rows, err := db.Query("SELECT domains, port, ssl_enabled, reverse_proxy_path, extra_headers, COALESCE(use_ipv4, 1) FROM projects WHERE domains != ''")
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	var content string
-	
+
 	// 添加注释头
 	content += "# Caddy 配置文件\n"
 	content += "# 由 Caddy 管理器自动生成\n\n"
-	
+
 	hasProjects := false
-	
+
 	for rows.Next() {
 		var domains string
 		var port int
 		var sslEnabled bool
+		var useIPv4 bool
 		var reverseProxyPath, extraHeaders *string
-		
-		rows.Scan(&domains, &port, &sslEnabled, &reverseProxyPath, &extraHeaders)
+
+		rows.Scan(&domains, &port, &sslEnabled, &reverseProxyPath, &extraHeaders, &useIPv4)
 
 		domainList := strings.Split(domains, "\n")
 		for _, domain := range domainList {
@@ -648,7 +654,7 @@ func generateCaddyfileForProjects() error {
 			if domain == "" {
 				continue
 			}
-			
+
 			// 验证域名格式
 			if !isValidDomain(domain) {
 				continue
@@ -656,11 +662,19 @@ func generateCaddyfileForProjects() error {
 
 			hasProjects = true
 			content += domain + " {\n"
+
+			// 反向代理 - 根据 use_ipv4 设置决定使用 IPv4 或 localhost
+			var proxyTarget string
+			if useIPv4 {
+				// 强制使用 IPv4 地址，避免 IPv6 连接问题
+				proxyTarget = fmt.Sprintf("127.0.0.1:%d", port)
+			} else {
+				// 使用 localhost（可能使用 IPv6）
+				proxyTarget = fmt.Sprintf("localhost:%d", port)
+			}
 			
-			// 反向代理 - 修复：移除错误的路径参数
-			// reverse_proxy 不需要路径匹配器，默认代理所有请求
-			content += fmt.Sprintf("    reverse_proxy localhost:%d\n", port)
-			
+			content += fmt.Sprintf("    reverse_proxy %s\n", proxyTarget)
+
 			// 额外 Header
 			if extraHeaders != nil && *extraHeaders != "" {
 				headers := strings.Split(*extraHeaders, "\n")
@@ -670,11 +684,11 @@ func generateCaddyfileForProjects() error {
 					}
 				}
 			}
-			
+
 			content += "}\n\n"
 		}
 	}
-	
+
 	// 如果没有项目，添加默认配置
 	if !hasProjects {
 		content += "# 暂无项目配置\n"

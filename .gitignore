@@ -1,8 +1,8 @@
 # .gitignore
 
-# 可执行文件
+# 编译文件（发布时需要）
+# 但在源代码仓库中不包含
 *.exe
-!caddy.exe
 
 # 数据目录
 data/
@@ -17,6 +17,8 @@ data/
 *.swp
 *.swo
 *~
+*.bak
+*.old
 
 # IDE 配置
 .vscode/
@@ -34,16 +36,22 @@ Desktop.ini
 # 依赖缓存
 vendor/
 
-# 多余的 README 文件
+# 开发过程文档（已清理）
+CHANGELOG_v*.md
 README_*.md
-!README.md
-
-# 临时文档
-CHANGELOG.md
-FEATURES.md
-IMPROVEMENTS.md
-QUICKSTART.md
-SUMMARY.md
+COMPLETE_*.md
 TEST_*.md
-USAGE.md
-USER_GUIDE.md
+DIAGNOSTICS_*.md
+*_GUIDE.md
+*_SUMMARY.md
+*_TROUBLESHOOTING.md
+*_UPDATE.md
+diagnose*.ps1
+fix-*.ps1
+start.bat
+
+# 保留的文档
+!README.md
+!CHANGELOG.md
+!LICENSE
+!RELEASE.md

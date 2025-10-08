@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"caddy-manager/internal/config"
@@ -154,9 +155,16 @@ func Reload() error {
 
 // IsRunning 检查 Caddy 是否运行
 func IsRunning() bool {
-	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq caddy.exe")
-	output, _ := cmd.Output()
-	return len(output) > 100
+	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq caddy.exe", "/FO", "CSV", "/NH")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	
+	// 检查输出中是否包含 caddy.exe
+	outputStr := string(output)
+	return strings.Contains(outputStr, "caddy.exe")
 }
 
 // GetLogs 获取 Caddy 日志
@@ -278,10 +286,16 @@ func unzip(src, dest string) error {
 
 // GetVersion 获取 Caddy 版本
 func GetVersion() string {
+	// 检查 Caddy 是否存在
+	if _, err := os.Stat(config.CaddyBin); err != nil {
+		return ""
+	}
+	
 	cmd := exec.Command(config.CaddyBin, "version")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	output, err := cmd.Output()
 	if err != nil {
-		return "未知"
+		return ""
 	}
 	
 	// 解析版本号，例如 "v2.10.2"
@@ -291,5 +305,5 @@ func GetVersion() string {
 		return parts[0]
 	}
 	
-	return "未知"
+	return ""
 }

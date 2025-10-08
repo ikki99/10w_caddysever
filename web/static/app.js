@@ -173,6 +173,12 @@ async function editProject(id) {
     document.getElementById('proj-headers').value = project.extra_headers || '';
     document.getElementById('proj-desc').value = project.description || '';
     
+    // 设置 IPv4 选项（默认为 true）
+    const useIPv4El = document.getElementById('proj-use-ipv4');
+    if (useIPv4El) {
+        useIPv4El.value = (project.use_ipv4 !== false) ? 'true' : 'false';
+    }
+    
     onProjectTypeChange();
     document.getElementById('modal-title').textContent = '编辑项目 - ' + project.name;
     document.getElementById('submit-project-btn').textContent = '保存修改';
@@ -228,7 +234,8 @@ async function submitProject() {
         ssl_email: document.getElementById('proj-email').value,
         reverse_proxy_path: document.getElementById('proj-proxy-path').value || '/',
         extra_headers: document.getElementById('proj-headers').value,
-        description: document.getElementById('proj-desc').value
+        description: document.getElementById('proj-desc').value,
+        use_ipv4: document.getElementById('proj-use-ipv4') ? document.getElementById('proj-use-ipv4').value === 'true' : true
     };
     
     // 验证域名格式
@@ -922,26 +929,37 @@ function createDiagnosticsModal() {
 }
 
 async function checkCaddyStatus() {
-    const res = await fetch('/api/caddy/status');
-    const data = await res.json();
-    const statusEl = document.getElementById('caddy-status');
-    const controlsEl = document.getElementById('caddy-controls');
-    
-    if (data.running) {
-        const versionText = data.version ? ` (${data.version})` : '';
-        statusEl.textContent = 'Caddy 运行中' + versionText;
-        statusEl.style.color = '#67C23A';
-        if (controlsEl) {
-            controlsEl.innerHTML = '<button class="btn btn-warning btn-sm" onclick="stopCaddy()">停止</button>' +
-                                   '<button class="btn btn-primary btn-sm" onclick="reloadCaddy()">重载配置</button>' +
-                                   '<button class="btn btn-primary btn-sm" onclick="restartCaddy()">重启</button>';
+    try {
+        const res = await fetch('/api/caddy/status');
+        if (!res.ok) {
+            console.error('Caddy status check failed:', res.status);
+            return;
         }
-    } else {
-        statusEl.textContent = 'Caddy 未运行';
-        statusEl.style.color = '#F56C6C';
-        if (controlsEl) {
-            controlsEl.innerHTML = '<button class="btn btn-success btn-sm" onclick="startCaddy()">启动</button>';
+        const data = await res.json();
+        const statusEl = document.getElementById('caddy-status');
+        const controlsEl = document.getElementById('caddy-controls');
+        
+        if (!statusEl) return; // Element not yet loaded
+        
+        if (data.running) {
+            const versionText = data.version ? ` (${data.version})` : '';
+            statusEl.textContent = 'Caddy 运行中' + versionText;
+            statusEl.style.color = '#67C23A';
+            if (controlsEl) {
+                controlsEl.innerHTML = '<button class="btn btn-warning btn-sm" onclick="stopCaddy()">停止</button>' +
+                                       '<button class="btn btn-primary btn-sm" onclick="reloadCaddy()">重载配置</button>' +
+                                       '<button class="btn btn-primary btn-sm" onclick="restartCaddy()">重启</button>';
+            }
+        } else {
+            statusEl.textContent = 'Caddy 未运行';
+            statusEl.style.color = '#F56C6C';
+            if (controlsEl) {
+                controlsEl.innerHTML = '<button class="btn btn-success btn-sm" onclick="startCaddy()">启动</button>';
+            }
         }
+    } catch (err) {
+        console.error('Caddy status check error:', err);
+        // Silently fail to avoid disturbing user experience
     }
 }
 
@@ -1072,6 +1090,14 @@ async function runDiagnostics() {
     
     try {
         const res = await fetch('/api/diagnostics/run');
+        if (!res.ok) {
+            if (res.status === 401) {
+                alert('登录已过期，请重新登录');
+                logout();
+                return;
+            }
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
         const data = await res.json();
         
         let html = '<div style="background:#f5f7fa;padding:15px;border-radius:4px;margin-top:10px;">';
@@ -1121,6 +1147,14 @@ async function checkSSLIssues() {
     
     try {
         const res = await fetch('/api/diagnostics/ssl?domain=' + encodeURIComponent(domain));
+        if (!res.ok) {
+            if (res.status === 401) {
+                alert('登录已过期，请重新登录');
+                logout();
+                return;
+            }
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
         const data = await res.json();
         
         let html = '<div style="background:#f5f7fa;padding:15px;border-radius:4px;margin-top:10px;">';

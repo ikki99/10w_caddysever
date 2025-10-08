@@ -135,8 +135,9 @@ func main() {
 	}
 	
 	fmt.Println("============================================================")
-	fmt.Println("                  Caddy 管理器 v0.0.11")
+	fmt.Println("                  Caddy 管理器 v1.0.0")
 	fmt.Println("============================================================")
+	fmt.Println("制作者: 10w | GitHub: github.com/10w-server/caddy-manager")
 	fmt.Printf("\n🌐 访问地址: http://localhost:%d\n", *port)
 	if !*noTray {
 		fmt.Println("📋 系统托盘: 已启用 (右键查看菜单)")

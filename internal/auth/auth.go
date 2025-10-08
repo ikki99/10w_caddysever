@@ -48,7 +48,7 @@ func CreateSession(username string) (string, error) {
 	mu.Lock()
 	sessions[sessionID] = &Session{
 		Username:  username,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // 延长到7天
 	}
 	mu.Unlock()
 
@@ -56,8 +56,8 @@ func CreateSession(username string) (string, error) {
 }
 
 func GetSession(sessionID string) (*Session, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
+	mu.Lock()
+	defer mu.Unlock()
 
 	session, exists := sessions[sessionID]
 	if !exists {
@@ -68,6 +68,9 @@ func GetSession(sessionID string) (*Session, bool) {
 		delete(sessions, sessionID)
 		return nil, false
 	}
+
+	// 每次访问时自动续期
+	session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
 
 	return session, true
 }

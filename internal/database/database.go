@@ -53,6 +53,7 @@ func Init() error {
 		reverse_proxy_path TEXT,
 		extra_headers TEXT,
 		description TEXT,
+		use_ipv4 BOOLEAN DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -83,6 +84,9 @@ func Init() error {
 	// 插入默认设置
 	db.Exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('security_path', '')")
 	db.Exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('www_root', 'C:\\www')")
+	
+	// 添加 use_ipv4 列（如果不存在）- 兼容旧数据库
+	db.Exec("ALTER TABLE projects ADD COLUMN use_ipv4 BOOLEAN DEFAULT 1")
 	
 	return nil
 }

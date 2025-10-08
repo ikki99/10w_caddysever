@@ -5,13 +5,16 @@ const IndexTemplate = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caddy 管理器</title>
+    <title>Caddy 管理器 v1.0.0</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f7fa; }
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .header h1 { color: #2c3e50; font-size: 24px; }
+        .header h1 { color: #2c3e50; font-size: 24px; margin-bottom: 10px; }
+        .header .author-info { color: #909399; font-size: 12px; padding: 8px 0; border-top: 1px solid #ebeef5; margin-top: 10px; }
+        .header .author-info a { color: #409EFF; text-decoration: none; }
+        .header .author-info a:hover { text-decoration: underline; }
         .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .project-card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 15px; border-left: 4px solid #409EFF; }
         .project-card.running { border-left-color: #67C23A; }
@@ -115,7 +118,8 @@ const IndexTemplate = `<!DOCTYPE html>
         <div class="container">
             <div class="header">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h1>🖥️ Caddy 管理器</h1>
+                    <h1>🚀 Caddy 管理器 v1.0.0</h1>
+                    <div class="author-info">制作者: 10w | 邮箱: <a href="mailto:wngx99@gmail.com">wngx99@gmail.com</a> | <a href="https://github.com/10w-server/caddy-manager" target="_blank">GitHub</a></div>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span id="caddy-status" style="font-weight: 600;">状态检查中...</span>
                         <span id="caddy-controls"></span>
@@ -361,10 +365,21 @@ const IndexTemplate = `<!DOCTYPE html>
                         </select>
                         <small>SSL 需要: 1.有效域名 2.域名已解析 3.80/443端口开放</small>
                     </div>
-                    <div class="form-group">
+                                        <div class="form-group">
                         <label>证书邮箱</label>
                         <input type="text" id="proj-email" placeholder="admin@example.com">
                         <small>用于接收证书相关通知</small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>代理连接方式 ⭐ 重要</label>
+                        <select id="proj-use-ipv4">
+                            <option value="true" selected>IPv4 (127.0.0.1) - 推荐</option>
+                            <option value="false">localhost (可能IPv6)</option>
+                        </select>
+                        <small style="color:#E6A23C;"><strong>⚠️ 如果遇到502错误，请选择IPv4！</strong><br>
+                        大多数Go/Node.js程序只监听IPv4，使用localhost可能导致连接失败</small>
                     </div>
                 </div>
                 <button class="btn" onclick="prevStep(2)">上一步</button>
