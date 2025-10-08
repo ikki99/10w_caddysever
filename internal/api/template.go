@@ -116,8 +116,9 @@ const IndexTemplate = `<!DOCTYPE html>
             <div class="header">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h1>🖥️ Caddy 管理器</h1>
-                    <div>
-                        <span id="caddy-status">状态检查中...</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="caddy-status" style="font-weight: 600;">状态检查中...</span>
+                        <span id="caddy-controls"></span>
                         <button class="btn btn-primary" onclick="logout()">退出</button>
                     </div>
                 </div>
@@ -183,9 +184,26 @@ const IndexTemplate = `<!DOCTYPE html>
                     <h3 style="margin-bottom: 20px;">文件管理器</h3>
                     <div class="breadcrumb" id="file-breadcrumb"></div>
                     <div style="margin-bottom: 15px;">
-                        <input type="file" id="file-upload">
-                        <button class="btn btn-primary" onclick="uploadFileToPath()">上传文件</button>
-                        <button class="btn btn-success" onclick="createNewFolder()">新建文件夹</button>
+                        <input type="file" id="file-upload" multiple style="display:none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('file-upload').click()">📁 选择文件</button>
+                        <button class="btn btn-primary" onclick="uploadFileToPath()">⬆️ 上传</button>
+                        <button class="btn btn-success" onclick="createNewFolder()">📂 新建文件夹</button>
+                        <span id="selected-files" style="margin-left:15px;color:#909399;"></span>
+                    </div>
+                    <div id="upload-drop-zone" style="border:2px dashed #dcdfe6;border-radius:4px;padding:30px;text-align:center;margin-bottom:15px;background:#fafafa;cursor:pointer;display:none;">
+                        <p style="color:#909399;margin:0;">📎 拖拽文件到这里上传</p>
+                        <p style="color:#c0c4cc;font-size:12px;margin:5px 0 0 0;">或点击"选择文件"按钮</p>
+                    </div>
+                    <div id="upload-progress" style="display:none;margin-bottom:15px;">
+                        <div style="background:#f5f7fa;border-radius:4px;padding:10px;">
+                            <div style="margin-bottom:5px;color:#606266;">
+                                <span id="upload-status">上传中...</span>
+                                <span id="upload-percent" style="float:right;">0%</span>
+                            </div>
+                            <div style="background:#e4e7ed;border-radius:4px;height:8px;overflow:hidden;">
+                                <div id="upload-bar" style="background:#409EFF;height:100%;width:0%;transition:width 0.3s;"></div>
+                            </div>
+                        </div>
                     </div>
                     <div id="file-browser"></div>
                 </div>
@@ -210,6 +228,12 @@ const IndexTemplate = `<!DOCTYPE html>
 
             <div id="settings-tab" class="tab-content">
                 <div class="card">
+                    <h3 style="margin-bottom: 20px;">系统诊断</h3>
+                    <p style="color:#606266;margin-bottom:15px;">检查系统配置和常见问题</p>
+                    <button class="btn btn-primary" onclick="runDiagnostics()">🔍 运行诊断</button>
+                    <button class="btn btn-success" onclick="checkSSLIssues()">🔒 检查 SSL 配置</button>
+                    <div id="diagnostics-result" style="margin-top:20px;"></div>
+                    <hr>
                     <h3 style="margin-bottom: 20px;">系统设置</h3>
                     <div class="form-group">
                         <label>安全访问路径（类似宝塔面板）</label>
@@ -241,6 +265,10 @@ const IndexTemplate = `<!DOCTYPE html>
                         <input type="password" id="new-password2">
                     </div>
                     <button class="btn btn-success" onclick="changePassword()">修改密码</button>
+                    <hr>
+                    <h3 style="margin-bottom: 20px;">应用程序控制</h3>
+                    <p style="color:#909399;margin-bottom:15px;">停止 Caddy 管理器将关闭所有正在运行的服务和项目。建议使用系统托盘菜单退出程序。</p>
+                    <button class="btn btn-danger" onclick="shutdownApplication()">🔴 关闭应用程序</button>
                 </div>
             </div>
         </div>
@@ -250,7 +278,7 @@ const IndexTemplate = `<!DOCTYPE html>
     <div id="add-project-modal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeModal('add-project-modal')">&times;</span>
-            <h2 style="margin-bottom: 20px;">新建项目</h2>
+            <h2 id="modal-title" style="margin-bottom: 20px;">新建项目</h2>
             
             <div class="wizard-steps">
                 <div class="wizard-step active" data-step="1">1. 选择类型</div>
@@ -320,7 +348,9 @@ const IndexTemplate = `<!DOCTYPE html>
                 <div class="form-group">
                     <label>绑定域名</label>
                     <textarea id="proj-domains" rows="4" placeholder="example.com&#10;www.example.com&#10;每行一个域名"></textarea>
-                    <small>留空则不绑定域名，只能通过端口访问</small>
+                    <small>留空则不绑定域名，只能通过端口访问。<br>
+                    <strong>注意</strong>: 请使用有效的域名格式，如 example.com 或 subdomain.example.com<br>
+                    不支持包含特殊字符或格式错误的域名</small>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -329,10 +359,12 @@ const IndexTemplate = `<!DOCTYPE html>
                             <option value="true">是（自动申请证书）</option>
                             <option value="false">否</option>
                         </select>
+                        <small>SSL 需要: 1.有效域名 2.域名已解析 3.80/443端口开放</small>
                     </div>
                     <div class="form-group">
                         <label>证书邮箱</label>
                         <input type="text" id="proj-email" placeholder="admin@example.com">
+                        <small>用于接收证书相关通知</small>
                     </div>
                 </div>
                 <button class="btn" onclick="prevStep(2)">上一步</button>
@@ -352,7 +384,7 @@ const IndexTemplate = `<!DOCTYPE html>
                 </div>
                 <div style="text-align: right; margin-top: 20px;">
                     <button class="btn" onclick="prevStep(3)">上一步</button>
-                    <button class="btn btn-success" onclick="submitProject()">创建项目</button>
+                    <button class="btn btn-success" id="submit-project-btn" onclick="submitProject()">创建项目</button>
                     <button class="btn" onclick="closeModal('add-project-modal')">取消</button>
                 </div>
             </div>

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -129,6 +128,28 @@ func Restart() error {
 	Stop()
 	time.Sleep(1 * time.Second)
 	return Start()
+}
+
+// Reload 重新加载配置（优雅重启）
+func Reload() error {
+	log.Println("🔄 重新加载 Caddy 配置...")
+	
+	// 检查 Caddy 是否在运行
+	if !IsRunning() {
+		return fmt.Errorf("Caddy 未运行")
+	}
+	
+	// 使用 caddy reload 命令
+	cmd := exec.Command(config.CaddyBin, "reload", "--config", config.CaddyConfig, "--adapter", "caddyfile")
+	cmd.Dir = config.CaddyDir
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("重新加载失败: %v\n输出: %s", err, string(output))
+	}
+	
+	log.Println("✅ Caddy 配置已重新加载")
+	return nil
 }
 
 // IsRunning 检查 Caddy 是否运行
@@ -257,10 +278,18 @@ func unzip(src, dest string) error {
 
 // GetVersion 获取 Caddy 版本
 func GetVersion() string {
-	if runtime.GOOS != "windows" {
+	cmd := exec.Command(config.CaddyBin, "version")
+	output, err := cmd.Output()
+	if err != nil {
 		return "未知"
 	}
-
-	// 可以执行 caddy version 命令获取版本
-	return "latest"
+	
+	// 解析版本号，例如 "v2.10.2"
+	version := strings.TrimSpace(string(output))
+	parts := strings.Fields(version)
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	
+	return "未知"
 }

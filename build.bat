@@ -1,12 +1,21 @@
 @echo off
-echo 正在编译 Caddy 管理器...
-go build -ldflags="-s -w" -o caddy-manager.exe
+chcp 65001 >nul
+echo.
+echo ========================================
+echo   Caddy Manager - Building
+echo ========================================
+echo.
+echo Building...
+go build -ldflags="-s -w -H=windowsgui" -o caddy-manager.exe
 if %errorlevel% == 0 (
     echo.
-    echo ✅ 编译成功！
-    echo 运行: caddy-manager.exe
+    echo [SUCCESS] Build completed successfully!
+    echo.
+    echo Run: caddy-manager.exe
+    echo.
 ) else (
     echo.
-    echo ❌ 编译失败
+    echo [ERROR] Build failed
+    echo.
 )
 pause

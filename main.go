@@ -1,16 +1,22 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"caddy-manager/internal/api"
 	"caddy-manager/internal/auth"
 	"caddy-manager/internal/caddy"
 	"caddy-manager/internal/config"
 	"caddy-manager/internal/database"
+	"caddy-manager/internal/system"
 	"caddy-manager/internal/tray"
 )
 
@@ -29,6 +35,9 @@ func main() {
 		log.Fatalf("数据库初始化失败: %v", err)
 	}
 	defer database.Close()
+	
+	// 检查管理员权限
+	checkAdminPrivileges()
 
 	// 检查并下载 Caddy
 	if err := caddy.CheckAndDownload(); err != nil {
@@ -64,7 +73,11 @@ func main() {
 	mux.HandleFunc("/api/sites/edit", auth.AuthMiddleware(api.EditSiteHandler))
 	mux.HandleFunc("/api/sites/delete", auth.AuthMiddleware(api.DeleteSiteHandler))
 	mux.HandleFunc("/api/caddy/status", auth.AuthMiddleware(api.CaddyStatusHandler))
+	mux.HandleFunc("/api/caddy/start", auth.AuthMiddleware(api.CaddyStartHandler))
+	mux.HandleFunc("/api/caddy/stop", auth.AuthMiddleware(api.CaddyStopHandler))
 	mux.HandleFunc("/api/caddy/restart", auth.AuthMiddleware(api.CaddyRestartHandler))
+	mux.HandleFunc("/api/caddy/reload", auth.AuthMiddleware(api.CaddyReloadHandler))
+	mux.HandleFunc("/api/caddy/ssl-status", auth.AuthMiddleware(api.CaddySSLStatusHandler))
 	mux.HandleFunc("/api/caddy/logs", auth.AuthMiddleware(api.CaddyLogsHandler))
 	mux.HandleFunc("/api/files/browse", auth.AuthMiddleware(api.BrowseFilesHandler))
 	mux.HandleFunc("/api/files/upload", auth.AuthMiddleware(api.UploadFileHandler))
@@ -87,12 +100,22 @@ func main() {
 	mux.HandleFunc("/api/projects/stop", auth.AuthMiddleware(api.StopProjectHandler))
 	mux.HandleFunc("/api/projects/restart", auth.AuthMiddleware(api.RestartProjectHandler))
 	mux.HandleFunc("/api/projects/logs", auth.AuthMiddleware(api.GetProjectLogsHandler))
+	mux.HandleFunc("/api/projects/status", auth.AuthMiddleware(api.GetProjectStatusHandler))
 	
 	// 任务管理
 	mux.HandleFunc("/api/tasks", auth.AuthMiddleware(api.TasksHandler))
 	mux.HandleFunc("/api/tasks/add", auth.AuthMiddleware(api.AddTaskHandler))
 	mux.HandleFunc("/api/tasks/delete", auth.AuthMiddleware(api.DeleteTaskHandler))
 	mux.HandleFunc("/api/tasks/execute", auth.AuthMiddleware(api.ExecuteTaskHandler))
+
+	// 应用程序控制
+	mux.HandleFunc("/api/app/shutdown", auth.AuthMiddleware(api.ShutdownHandler))
+	
+	// 诊断和修复
+	mux.HandleFunc("/api/diagnostics/run", auth.AuthMiddleware(api.DiagnosticsHandler))
+	mux.HandleFunc("/api/diagnostics/ssl", auth.AuthMiddleware(api.CheckSSLHandler))
+	mux.HandleFunc("/api/diagnostics/autofix", auth.AuthMiddleware(api.AutoFixHandler))
+	mux.HandleFunc("/api/system/status", auth.AuthMiddleware(api.SystemStatusHandler))
 
 	// 静态文件
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
@@ -105,10 +128,19 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", *port)
 	
+	// 创建 HTTP 服务器
+	server := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
+	
 	fmt.Println("============================================================")
-	fmt.Println("                  Caddy 管理器")
+	fmt.Println("                  Caddy 管理器 v0.0.11")
 	fmt.Println("============================================================")
 	fmt.Printf("\n🌐 访问地址: http://localhost:%d\n", *port)
+	if !*noTray {
+		fmt.Println("📋 系统托盘: 已启用 (右键查看菜单)")
+	}
 	fmt.Println("📊 按 Ctrl+C 停止服务")
 	fmt.Println()
 	
@@ -117,7 +149,77 @@ func main() {
 		go tray.Run(*port)
 	}
 	
-	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatalf("服务启动失败: %v", err)
+	// 设置信号处理
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	
+	// 启动服务器
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("服务启动失败: %v", err)
+		}
+	}()
+	
+	// 等待信号
+	<-sigChan
+	
+	fmt.Println("\n正在关闭服务...")
+	
+	// 优雅关闭
+	gracefulShutdown(server)
+}
+
+func gracefulShutdown(server *http.Server) {
+	// 创建超时上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	// 停止 Caddy
+	fmt.Println("停止 Caddy 服务...")
+	caddy.Stop()
+	
+	// 停止所有项目
+	fmt.Println("停止所有项目...")
+	api.StopAllProjects()
+	
+	// 关闭 HTTP 服务器
+	fmt.Println("关闭 HTTP 服务器...")
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("服务器关闭错误: %v", err)
+	}
+	
+	// 关闭数据库
+	fmt.Println("关闭数据库连接...")
+	database.Close()
+	
+	fmt.Println("✓ 服务已安全关闭")
+}
+
+func checkAdminPrivileges() {
+	if !system.IsAdmin() {
+		fmt.Println("============================================================")
+		fmt.Println("⚠️  警告: 未以管理员身份运行")
+		fmt.Println("============================================================")
+		fmt.Println("")
+		fmt.Println("当前程序未以管理员权限运行，这可能导致以下问题：")
+		fmt.Println("  • 无法绑定 80 和 443 端口")
+		fmt.Println("  • 无法自动申请 SSL 证书")
+		fmt.Println("  • 无法配置防火墙规则")
+		fmt.Println("")
+		fmt.Println("建议操作：")
+		fmt.Println("  1. 关闭本程序")
+		fmt.Println("  2. 右键程序图标 → 选择'以管理员身份运行'")
+		fmt.Println("  3. 或在 Web 界面的诊断页面查看详细说明")
+		fmt.Println("")
+		fmt.Println("如果只使用非标准端口（如 8080）可以忽略此警告")
+		fmt.Println("============================================================")
+		fmt.Println("")
+		
+		// 等待用户确认
+		fmt.Print("按 Enter 键继续，或 Ctrl+C 退出...")
+		fmt.Scanln()
+		fmt.Println("")
+	} else {
+		fmt.Println("✓ 已以管理员权限运行")
 	}
 }

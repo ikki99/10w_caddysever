@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"time"
 
 	"caddy-manager/internal/auth"
 	"caddy-manager/internal/caddy"
@@ -105,14 +106,145 @@ func DeleteSiteHandler(w http.ResponseWriter, r *http.Request) {
 
 func CaddyStatusHandler(w http.ResponseWriter, r *http.Request) {
 	running := caddy.IsRunning()
+	version := caddy.GetVersion()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"running": running})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"running": running,
+		"version": version,
+	})
+}
+
+func CaddySSLStatusHandler(w http.ResponseWriter, r *http.Request) {
+	errors := []string{}
+	
+	// 读取 Caddy 日志检查 SSL 错误
+	logPath := config.CaddyLogFile
+	if data, err := os.ReadFile(logPath); err == nil {
+		logContent := string(data)
+		
+		// 检查常见的 SSL 错误
+		if contains(logContent, "acme") && contains(logContent, "error") {
+			errors = append(errors, "ACME证书申请失败")
+		}
+		if contains(logContent, "dns") && contains(logContent, "error") {
+			errors = append(errors, "DNS验证失败，请检查域名解析")
+		}
+		if contains(logContent, "timeout") {
+			errors = append(errors, "连接超时，请检查网络和防火墙设置")
+		}
+		if contains(logContent, "rate limit") {
+			errors = append(errors, "证书申请频率限制，请稍后再试")
+		}
+		if contains(logContent, "unauthorized") {
+			errors = append(errors, "域名验证失败，请确认域名已正确解析")
+		}
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"errors": errors,
+		"hasErrors": len(errors) > 0,
+	})
+}
+
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && 
+		(len(s) >= len(substr)) && 
+		(s == substr || len(s) > len(substr) && 
+		func() bool {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+			return false
+		}())
+}
+
+func CaddyStartHandler(w http.ResponseWriter, r *http.Request) {
+	if caddy.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Caddy 已在运行中",
+		})
+		return
+	}
+	
+	if err := caddy.Start(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Caddy 启动成功",
+	})
+}
+
+func CaddyStopHandler(w http.ResponseWriter, r *http.Request) {
+	if !caddy.IsRunning() {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Caddy 未运行",
+		})
+		return
+	}
+	
+	caddy.Stop()
+	
+	// 等待一小段时间确保停止
+	time.Sleep(500 * time.Millisecond)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Caddy 已停止",
+	})
 }
 
 func CaddyRestartHandler(w http.ResponseWriter, r *http.Request) {
-	caddy.Restart()
-	w.WriteHeader(http.StatusOK)
+	if err := caddy.Restart(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Caddy 重启成功",
+	})
+}
+
+func CaddyReloadHandler(w http.ResponseWriter, r *http.Request) {
+	if err := caddy.Reload(); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Caddy 配置已重新加载（零停机）",
+	})
 }
 
 func SetupHandler(w http.ResponseWriter, r *http.Request) {
@@ -215,6 +347,23 @@ func EnvListHandler(w http.ResponseWriter, r *http.Request) {
 
 func EnvInstallHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func ShutdownHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "应用程序正在关闭..."})
+	
+	// 在单独的 goroutine 中执行关闭操作
+	go func() {
+		// 等待响应发送完成
+		time.Sleep(1 * time.Second)
+		
+		// 发送中断信号触发优雅关闭
+		p, err := os.FindProcess(os.Getpid())
+		if err == nil {
+			p.Signal(os.Interrupt)
+		}
+	}()
 }
 
 func generateCaddyfile() error {
