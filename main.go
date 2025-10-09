@@ -47,6 +47,9 @@ func main() {
 		// 自动启动 Caddy
 		go caddy.AutoStart()
 	}
+	
+	// 自动启动设置为自动启动的项目
+	go autoStartProjects()
 
 	// 检查是否首次运行
 	if database.IsFirstRun() {
@@ -64,6 +67,7 @@ func main() {
 	// API 路由
 	mux.HandleFunc("/api/setup", api.SetupHandler)
 	mux.HandleFunc("/api/login", api.LoginHandler)
+	mux.HandleFunc("/api/auth/check", api.CheckAuthHandler)
 	mux.HandleFunc("/api/logout", api.LogoutHandler)
 	mux.HandleFunc("/api/system/info", api.GetSystemInfoHandler)
 	
@@ -84,6 +88,11 @@ func main() {
 	mux.HandleFunc("/api/files/download", auth.AuthMiddleware(api.DownloadFileHandler))
 	mux.HandleFunc("/api/files/delete", auth.AuthMiddleware(api.DeleteFileHandler))
 	mux.HandleFunc("/api/files/create-folder", auth.AuthMiddleware(api.CreateFolderHandler))
+	mux.HandleFunc("/api/files/compress", auth.AuthMiddleware(api.CompressFilesHandler))
+	mux.HandleFunc("/api/files/decompress", auth.AuthMiddleware(api.DecompressFileHandler))
+	mux.HandleFunc("/api/files/read", auth.AuthMiddleware(api.ReadFileHandler))
+	mux.HandleFunc("/api/files/save", auth.AuthMiddleware(api.SaveFileHandler))
+	mux.HandleFunc("/api/files/rename", auth.AuthMiddleware(api.RenameFileHandler))
 	mux.HandleFunc("/api/env/list", auth.AuthMiddleware(api.EnvListHandler))
 	mux.HandleFunc("/api/env/install", auth.AuthMiddleware(api.EnvInstallHandler))
 	mux.HandleFunc("/api/env/guide", auth.AuthMiddleware(api.InstallEnvGuideHandler))
@@ -116,6 +125,7 @@ func main() {
 	mux.HandleFunc("/api/diagnostics/ssl", auth.AuthMiddleware(api.CheckSSLHandler))
 	mux.HandleFunc("/api/diagnostics/autofix", auth.AuthMiddleware(api.AutoFixHandler))
 	mux.HandleFunc("/api/system/status", auth.AuthMiddleware(api.SystemStatusHandler))
+	mux.HandleFunc("/api/system/monitor", auth.AuthMiddleware(api.SystemMonitorHandler))
 
 	// 静态文件
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
@@ -137,7 +147,7 @@ func main() {
 	fmt.Println("============================================================")
 	fmt.Println("                  Caddy 管理器 v1.0.0")
 	fmt.Println("============================================================")
-	fmt.Println("制作者: 10w | GitHub: github.com/10w-server/caddy-manager")
+	fmt.Println("制作者: 10w | GitHub: github.com/ikki99/10w_caddysever")
 	fmt.Printf("\n🌐 访问地址: http://localhost:%d\n", *port)
 	if !*noTray {
 		fmt.Println("📋 系统托盘: 已启用 (右键查看菜单)")
@@ -223,4 +233,46 @@ func checkAdminPrivileges() {
 	} else {
 		fmt.Println("✓ 已以管理员权限运行")
 	}
+}
+
+// autoStartProjects 自动启动设置为自动启动的项目
+func autoStartProjects() {
+// 等待数据库和系统初始化
+time.Sleep(3 * time.Second)
+
+db := database.GetDB()
+rows, err := db.Query("SELECT id FROM projects WHERE auto_start = 1")
+if err != nil {
+log.Printf("查询自动启动项目失败: %v", err)
+return
+}
+defer rows.Close()
+
+var projectIDs []int
+for rows.Next() {
+var id int
+if err := rows.Scan(&id); err == nil {
+projectIDs = append(projectIDs, id)
+}
+}
+
+if len(projectIDs) == 0 {
+return
+}
+
+fmt.Printf("🚀 自动启动 %d 个项目...\n", len(projectIDs))
+
+for _, id := range projectIDs {
+// 每个项目间隔 1 秒启动，避免资源竞争
+time.Sleep(1 * time.Second)
+
+// 调用启动函数
+if err := api.AutoStartProject(id); err != nil {
+log.Printf("⚠️  项目 #%d 自动启动失败: %v", id, err)
+} else {
+fmt.Printf("✓ 项目 #%d 已自动启动\n", id)
+}
+}
+
+fmt.Println("✓ 自动启动完成")
 }

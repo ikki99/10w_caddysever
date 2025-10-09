@@ -71,7 +71,7 @@ git add IPv6兼容性更新说明.txt IPv6快速参考.txt SSL问题快速解决
 git commit -m "Release v1.0.0"
 
 # 添加远程仓库
-git remote add origin https://github.com/10w-server/caddy-manager.git
+git remote add origin https://github.com/ikki99/10w_caddysever.git
 
 # 推送
 git push -u origin main
@@ -146,7 +146,7 @@ caddy-manager-v1.0.0-windows-amd64.zip
 
 ### 🐛 问题反馈
 
-如遇问题请提交 [Issue](https://github.com/10w-server/caddy-manager/issues)
+如遇问题请提交 [Issue](https://github.com/ikki99/10w_caddysever/issues)
 
 ---
 

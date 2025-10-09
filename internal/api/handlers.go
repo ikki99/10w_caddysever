@@ -311,7 +311,8 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   7 * 86400, // 7天
 		HttpOnly: true,
 		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode, // 改为 Strict 模式
+		// Secure:   true, // HTTPS 环境下启用
 	})
 
 	w.WriteHeader(http.StatusOK)

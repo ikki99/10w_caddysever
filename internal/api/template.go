@@ -5,7 +5,7 @@ const IndexTemplate = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caddy 管理器 v1.0.0</title>
+    <title>Caddy 管理器 v1.0.4</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f5f7fa; }
@@ -66,7 +66,9 @@ const IndexTemplate = `<!DOCTYPE html>
         .wizard-step.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #409EFF; }
         .step-content { display: none; }
         .step-content.active { display: block; }
-    </style>
+        .progress-bar { width: 100%; height: 20px; background: #e4e7ed; border-radius: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #409EFF; transition: width 0.3s ease; border-radius: 10px; }
+        </style>
 </head>
 <body>
     <!-- 设置页面 -->
@@ -118,8 +120,8 @@ const IndexTemplate = `<!DOCTYPE html>
         <div class="container">
             <div class="header">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h1>🚀 Caddy 管理器 v1.0.0</h1>
-                    <div class="author-info">制作者: 10w | 邮箱: <a href="mailto:wngx99@gmail.com">wngx99@gmail.com</a> | <a href="https://github.com/10w-server/caddy-manager" target="_blank">GitHub</a></div>
+                    <h1>🚀 Caddy 管理器 v1.0.4</h1>
+                    <div class="author-info">制作者: 10w | 邮箱: <a href="mailto:wngx99@gmail.com">wngx99@gmail.com</a> | <a href="https://github.com/ikki99/10w_caddysever" target="_blank">GitHub</a></div>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span id="caddy-status" style="font-weight: 600;">状态检查中...</span>
                         <span id="caddy-controls"></span>
@@ -139,6 +141,48 @@ const IndexTemplate = `<!DOCTYPE html>
             </div>
 
             <!-- 仪表盘 -->
+            <div id="dashboard-tab" class="tab-content active">
+                <!-- 系统监控 -->
+                <div class="card">
+                    <h3 style="margin-bottom: 20px;">📊 系统监控 <button class="btn btn-sm" onclick="refreshMonitor()" style="float:right;">刷新</button></h3>
+                    
+                    <!-- CPU 和内存 -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div>
+                            <h4 style="color: #606266; margin-bottom: 10px;">💻 CPU</h4>
+                            <div style="background: #f5f7fa; padding: 15px; border-radius: 4px;">
+                                <div style="font-size: 24px; font-weight: 600; color: #409EFF;" id="cpu-percent">--</div>
+                                <div style="color: #909399; font-size: 14px; margin-top: 5px;">核心数: <span id="cpu-cores">--</span></div>
+                                <div class="progress-bar" style="margin-top: 10px;">
+                                    <div id="cpu-bar" class="progress-fill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="color: #606266; margin-bottom: 10px;">🧠 内存</h4>
+                            <div style="background: #f5f7fa; padding: 15px; border-radius: 4px;">
+                                <div style="font-size: 24px; font-weight: 600; color: #67C23A;" id="memory-percent">--</div>
+                                <div style="color: #909399; font-size: 14px; margin-top: 5px;">
+                                    已用: <span id="memory-used">--</span> / <span id="memory-total">--</span>
+                                </div>
+                                <div class="progress-bar" style="margin-top: 10px;">
+                                    <div id="memory-bar" class="progress-fill" style="width: 0%; background: #67C23A;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 磁盘信息 -->
+                    <h4 style="color: #606266; margin-bottom: 10px;">💾 磁盘空间</h4>
+                    <div id="disk-info" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
+                </div>
+                
+                <!-- 系统信息 -->
+                <div class="card">
+                    <h3 style="margin-bottom: 20px;">ℹ️ 系统信息</h3>
+                    <div class="info-grid" id="sys-info-grid"></div>
+                </div>
+            </div>
             <div id="dashboard-tab" class="tab-content active">
                 <div class="card">
                     <h3 style="margin-bottom: 20px;">系统信息</h3>
@@ -498,7 +542,26 @@ const IndexTemplate = `<!DOCTYPE html>
             </div>
         </div>
     </div>
+    <!-- 代码编辑器模态框 -->
+    <div id="editor-modal" class="modal">
+        <div class="modal-content" style="max-width: 1000px; max-height: 90vh;">
+            <span class="modal-close" onclick="closeEditor()">&times;</span>
+            <h2 style="margin-bottom: 15px;">
+                <span id="editor-filename">文件编辑器</span>
+                <small style="color: #909399; font-size: 14px; margin-left: 10px;">语言: <span id="editor-language">Text</span></small>
+            </h2>
+            <input type="hidden" id="editor-filepath">
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-success" onclick="saveFile()">💾 保存 (Ctrl+S)</button>
+                <button class="btn" onclick="closeEditor()">关闭</button>
+                <small style="margin-left: 15px; color: #909399;">提示: Tab键插入空格 | Ctrl+S 保存</small>
+            </div>
+            <textarea id="code-editor" style="width: 100%; height: 500px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 14px; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; resize: vertical;"></textarea>
+        </div>
+    </div>
 
+    <script src="/static/app.js"></script>
+    <script src="/static/file-manager.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>`

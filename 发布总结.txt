@@ -6,7 +6,7 @@
 
 制作者：10w
 邮箱：wngx99@gmail.com
-GitHub：https://github.com/10w-server/caddy-manager
+GitHub：https://github.com/ikki99/10w_caddysever
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -23,7 +23,7 @@ GitHub：https://github.com/10w-server/caddy-manager
 ✓ 制作者信息显示：
   - 制作者: 10w
   - 邮箱: wngx99@gmail.com
-  - GitHub: github.com/10w-server/caddy-manager
+  - GitHub: github.com/ikki99/10w_caddysever
 
 【文档更新】
 ✓ 创建全新 README.md
@@ -106,7 +106,7 @@ GitHub：https://github.com/10w-server/caddy-manager
    - 不要初始化 README（我们已有）
 
 2. 添加远程仓库：
-   git remote add origin https://github.com/10w-server/caddy-manager.git
+   git remote add origin https://github.com/ikki99/10w_caddysever.git
 
 3. 推送到 GitHub：
    git branch -M main

@@ -9,6 +9,28 @@ window.onload = function() {
 };
 
 async function checkFirstRun() {
+    // 先检查是否有有效的 Session
+    try {
+        const sessionCheck = await fetch('/api/auth/check');
+        if (sessionCheck.ok) {
+            const data = await sessionCheck.json();
+            if (data.authenticated) {
+                // 已登录，直接显示仪表盘
+                document.getElementById('dashboard').style.display = 'block';
+                initializeFilePath();
+                loadSystemInfo();
+                loadProjects();
+                checkCaddyStatus();
+                setInterval(checkCaddyStatus, 10000);
+                return;
+            }
+        }
+    } catch (err) {
+        // Session 无效或过期，继续检查是否首次运行
+        console.log('Session check failed:', err);
+    }
+    
+    // 检查是否首次运行
     const res = await fetch('/api/setup');
     const data = await res.json();
     if (data.firstRun) {
@@ -58,6 +80,10 @@ document.getElementById('login-form')?.addEventListener('submit', async (e) => {
     if (res.ok) {
         document.getElementById('login-page').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
+        
+        // 初始化 currentPath 为默认路径
+        initializeFilePath();
+        
         loadSystemInfo();
         loadProjects();
         checkCaddyStatus();
@@ -587,7 +613,10 @@ function switchTab(tab) {
     event.target.classList.add('active');
     document.getElementById(tab + '-tab').classList.add('active');
     
-    if (tab === 'dashboard') { loadSystemInfo(); }
+    if (tab === 'dashboard') { 
+        loadSystemInfo(); 
+        startMonitorRefresh(); // 启动监控刷新
+    }
     if (tab === 'projects') { 
         loadProjects(); 
         // 定期刷新项目状态
@@ -721,11 +750,30 @@ function createNewFolder() {
     const name = prompt('请输入文件夹名称:');
     if (!name) return;
     
+    // 验证文件夹名称
+    if (!/^[a-zA-Z0-9_\-\u4e00-\u9fa5\s]+$/.test(name)) {
+        alert('文件夹名称包含非法字符！\n只允许字母、数字、中文、下划线和连字符');
+        return;
+    }
+    
     fetch('/api/files/create-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: currentPath, name })
-    }).then(() => loadFiles(currentPath));
+    })
+    .then(async res => {
+        if (res.ok) {
+            const data = await res.json();
+            alert('✓ ' + data.message);
+            loadFiles(currentPath);
+        } else {
+            const error = await res.text();
+            alert('✗ 创建失败: ' + error);
+        }
+    })
+    .catch(err => {
+        alert('✗ 创建失败: ' + err.message);
+    });
 }
 
 function deleteFile(path) {
@@ -1270,3 +1318,97 @@ window.addEventListener('load', function() {
         });
     }
 });
+
+// ===== 系统监控 =====
+
+let monitorInterval = null;
+
+async function refreshMonitor() {
+    try {
+        const res = await fetch('/api/system/monitor');
+        const data = await res.json();
+        
+        // 更新 CPU
+        document.getElementById('cpu-percent').textContent = data.cpu.used_percent.toFixed(1) + '%';
+        document.getElementById('cpu-cores').textContent = data.cpu.cores;
+        document.getElementById('cpu-bar').style.width = data.cpu.used_percent + '%';
+        
+        // 更新内存
+        document.getElementById('memory-percent').textContent = data.memory.used_percent.toFixed(1) + '%';
+        document.getElementById('memory-used').textContent = (data.memory.used_mb / 1024).toFixed(1) + ' GB';
+        document.getElementById('memory-total').textContent = (data.memory.total_mb / 1024).toFixed(1) + ' GB';
+        document.getElementById('memory-bar').style.width = data.memory.used_percent + '%';
+        
+        // 根据使用率改变颜色
+        const memoryBar = document.getElementById('memory-bar');
+        if (data.memory.used_percent > 90) {
+            memoryBar.style.background = '#F56C6C';
+        } else if (data.memory.used_percent > 70) {
+            memoryBar.style.background = '#E6A23C';
+        } else {
+            memoryBar.style.background = '#67C23A';
+        }
+        
+        // 更新磁盘
+        const diskInfo = document.getElementById('disk-info');
+        diskInfo.innerHTML = data.disks.map(disk => {
+            let color = '#67C23A';
+            if (disk.used_percent > 90) color = '#F56C6C';
+            else if (disk.used_percent > 70) color = '#E6A23C';
+            
+            return `
+                <div style="background: #f5f7fa; padding: 15px; border-radius: 4px;">
+                    <h4 style="color: #606266; margin-bottom: 8px;">${disk.drive}</h4>
+                    <div style="font-size: 18px; font-weight: 600; color: ${color};">
+                        ${disk.used_percent.toFixed(1)}%
+                    </div>
+                    <div style="color: #909399; font-size: 13px; margin-top: 5px;">
+                        已用: ${disk.used_gb} GB / ${disk.total_gb} GB
+                    </div>
+                    <div class="progress-bar" style="margin-top: 8px;">
+                        <div class="progress-fill" style="width: ${disk.used_percent}%; background: ${color};"></div>
+                    </div>
+                    <div style="color: #909399; font-size: 12px; margin-top: 5px;">
+                        可用: ${disk.free_gb} GB
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (err) {
+        console.error('获取监控数据失败:', err);
+    }
+}
+
+// 启动定时刷新
+function startMonitorRefresh() {
+    refreshMonitor();
+    if (monitorInterval) clearInterval(monitorInterval);
+    monitorInterval = setInterval(refreshMonitor, 3000); // 每3秒刷新
+}
+
+// 停止定时刷新
+function stopMonitorRefresh() {
+    if (monitorInterval) {
+        clearInterval(monitorInterval);
+        monitorInterval = null;
+    }
+}
+
+// 初始化文件路径
+async function initializeFilePath() {
+    try {
+        const res = await fetch('/api/settings/get');
+        if (!res.ok) {
+            console.warn('获取设置失败，使用默认路径');
+            currentPath = 'C:\\www';
+            return;
+        }
+        const data = await res.json();
+        currentPath = data.www_root || 'C:\\www';
+        console.log('初始化文件路径:', currentPath);
+    } catch (err) {
+        currentPath = 'C:\\www'; // 默认路径
+        console.error('获取默认路径失败，使用 C:\\www:', err);
+    }
+}

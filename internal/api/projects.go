@@ -753,3 +753,20 @@ func isValidDomain(domain string) bool {
 	
 	return true
 }
+
+
+// AutoStartProject 自动启动项目（用于系统启动时）
+func AutoStartProject(id int) error {
+db := database.GetDB()
+var p models.Project
+
+err := db.QueryRow(`SELECT name, project_type, root_dir, exec_path, port, start_command 
+FROM projects WHERE id=?`, id).Scan(&p.Name, &p.ProjectType, &p.RootDir, &p.ExecPath, &p.Port, &p.StartCommand)
+
+if err != nil {
+return err
+}
+
+p.ID = id
+return startProject(id, &p)
+}

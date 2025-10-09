@@ -278,13 +278,30 @@ func CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	folderPath := filepath.Join(req.Path, req.Name)
-	if err := os.MkdirAll(folderPath, 0755); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if req.Name == "" {
+		http.Error(w, "文件夹名称不能为空", http.StatusBadRequest)
 		return
 	}
 	
-	w.WriteHeader(http.StatusOK)
+	folderPath := filepath.Join(req.Path, req.Name)
+	
+	// 检查文件夹是否已存在
+	if _, err := os.Stat(folderPath); err == nil {
+		http.Error(w, "文件夹已存在", http.StatusConflict)
+		return
+	}
+	
+	if err := os.MkdirAll(folderPath, 0755); err != nil {
+		http.Error(w, "创建文件夹失败: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "文件夹创建成功",
+		"path":    folderPath,
+	})
 }
 
 // DeleteFileHandler 删除文件或文件夹
