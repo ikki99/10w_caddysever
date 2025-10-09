@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.5-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
@@ -166,6 +166,19 @@ caddy-manager/
 欢迎提交 Issue 和 Pull Request！
 
 ## 📝 更新日志
+
+### v1.0.5 (2025-01-09)
+
+**修复：**
+- ✅ 修复文件管理器新建文件夹位置错误问题
+- ✅ 新建文件夹现在正确在当前浏览目录创建
+
+### v1.0.4 (2025-01-09)
+
+**修复：**
+- ✅ 修复数据库初始化和迁移问题
+- ✅ 修复系统设置保存失败问题
+- ✅ 增强数据持久化稳定性
 
 ### v1.0.0 (2025-01-09)
 

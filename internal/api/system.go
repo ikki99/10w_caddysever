@@ -283,7 +283,19 @@ func CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	folderPath := filepath.Join(req.Path, req.Name)
+	// 如果 path 为空，使用 www_root
+	basePath := req.Path
+	if basePath == "" {
+		db := database.GetDB()
+		var wwwRoot string
+		if err := db.QueryRow("SELECT value FROM settings WHERE key = 'www_root'").Scan(&wwwRoot); err != nil {
+			http.Error(w, "无法获取www根目录设置", http.StatusInternalServerError)
+			return
+		}
+		basePath = wwwRoot
+	}
+	
+	folderPath := filepath.Join(basePath, req.Name)
 	
 	// 检查文件夹是否已存在
 	if _, err := os.Stat(folderPath); err == nil {
