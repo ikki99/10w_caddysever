@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.6] - 2025-11-12
+
+### 🛠 修复
+- 静态站点无法停止 / 删除：当进程未被跟踪时，停止操作会回退为“按端口终止进程（Windows：netstat + taskkill）”，确保能够停止并删除静态站点。
+
+### 影响文件
+- 后端：`internal/api/projects.go`
+
+[1.0.6]: https://github.com/ikki99/10w_caddysever/releases/tag/v1.0.6
+
 ## [1.0.5] - 2025-11-12
 
 ### ✨ 功能与改进
