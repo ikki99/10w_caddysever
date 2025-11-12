@@ -258,6 +258,11 @@ func validateProjectConfig(p *models.Project) []string {
 		errors = append(errors, fmt.Sprintf("❌ 端口号无效: %d (应在 1-65535 之间)", p.Port))
 	}
 	
+	// 静态站点不需要启动命令校验
+	if p.ProjectType == "static" {
+		return errors
+	}
+	
 	hasStartConfig := false
 	if p.ExecPath != "" {
 		hasStartConfig = true
@@ -494,14 +499,18 @@ func startProject(id int, p *models.Project) error {
 
 	var cmd *exec.Cmd
 	
-	switch p.ProjectType {
-	case "go":
-		if p.ExecPath != "" {
-			cmd = exec.Command(p.ExecPath)
-		} else if p.StartCommand != "" {
-			parts := strings.Fields(p.StartCommand)
-			cmd = exec.Command(parts[0], parts[1:]...)
-		}
+switch p.ProjectType {
+case "static":
+    // 静态站点：使用 Caddy 自带 file-server 挂载目录到端口
+    // 等价命令: caddy file-server --root <dir> --listen :<port> --browse
+    cmd = exec.Command(config.CaddyBin, "file-server", "--root", p.RootDir, "--listen", fmt.Sprintf(":%d", p.Port), "--browse")
+case "go":
+    if p.ExecPath != "" {
+        cmd = exec.Command(p.ExecPath)
+    } else if p.StartCommand != "" {
+        parts := strings.Fields(p.StartCommand)
+        cmd = exec.Command(parts[0], parts[1:]...)
+    }
 	case "python":
 		if p.StartCommand != "" {
 			parts := strings.Fields(p.StartCommand)
@@ -524,9 +533,9 @@ func startProject(id int, p *models.Project) error {
 		}
 	}
 
-	if cmd == nil {
-		return fmt.Errorf("无法启动项目：未配置启动命令")
-	}
+if cmd == nil {
+    return fmt.Errorf("无法启动项目：未配置启动命令")
+}
 
 	cmd.Dir = p.RootDir
 	cmd.Stdout = logFile

@@ -215,6 +215,13 @@ async function editProject(id) {
 function onProjectTypeChange() {
     const type = document.getElementById('proj-type').value;
     document.getElementById('exec-path-group').style.display = (type === 'go' || type === 'java') ? 'block' : 'none';
+    // ������̬վ�㣬Ĭ�ϲ��� SSL ������ʾ��Ͷ���
+    if (type === 'static') {
+        const sslEl = document.getElementById('proj-ssl');
+        const domainsEl = document.getElementById('proj-domains');
+        if (sslEl) sslEl.value = 'false';
+        if (domainsEl) domainsEl.value = '';
+    }
 }
 
 function nextStep(step) {
@@ -555,6 +562,11 @@ async function deleteProject(id) {
     if (!confirm('确定删除该项目吗？此操作不可恢复！')) return;
     await fetch('/api/projects/delete?id=' + id, { method: 'POST' });
     loadProjects();
+}
+
+// override: cancel restart feature to avoid hang
+async function restartProject(id) {
+    alert('已取消重启功能，请使用“停止/启动”切换');
 }
 
 // ===== 任务管理 =====

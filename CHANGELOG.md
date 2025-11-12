@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2025-11-12
+
+### ✨ 功能与改进
+- 静态网站创建大幅精简：只需选择目录与端口即可，无需绑定域名/SSL；后端使用 Caddy 自带的 file-server 提供静态服务，可直接通过 `http://服务器IP:端口` 访问/下载目录文件。
+- 新建项目向导在选择“静态站点”时自动禁用 SSL 并清空域名，避免无关校验阻断提交。
+
+### 🛠 修复
+- 移除“重启项目”带来的卡住问题：前端取消重启动作，建议使用“停止/启动”切换运行状态。
+- 修复 `build.bat` 在打印成功后仍显示“[ERROR] Build failed”的误报问题，改为基于 `errorlevel` 的显式跳转与退出码。
+
+### 影响文件
+- 后端：`internal/api/projects.go`
+- 前端：`web/static/app.js`
+- 构建：`build.bat`
+
+[1.0.5]: https://github.com/ikki99/10w_caddysever/releases/tag/v1.0.5
+
 ## [1.0.4] - 2025-01-09
 
 ### 🐛 紧急修复
