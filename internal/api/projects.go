@@ -565,17 +565,57 @@ if cmd == nil {
 }
 
 func stopProject(id int) error {
-	processMutex.Lock()
-	defer processMutex.Unlock()
+    processMutex.Lock()
+    defer processMutex.Unlock()
 
-	if cmd, exists := projectProcesses[id]; exists {
-		if cmd.Process != nil {
-			cmd.Process.Kill()
-		}
-		delete(projectProcesses, id)
-	}
+    if cmd, exists := projectProcesses[id]; exists {
+        if cmd.Process != nil {
+            cmd.Process.Kill()
+        }
+        delete(projectProcesses, id)
+        return nil
+    }
 
-	return nil
+    // 兜底：若未跟踪到进程（如子进程脱离等），尝试按端口终止进程（Windows）
+    db := database.GetDB()
+    var port int
+    _ = db.QueryRow("SELECT port FROM projects WHERE id=?", id).Scan(&port)
+    if port > 0 {
+        _ = killByPort(port)
+    }
+
+    return nil
+}
+
+// killByPort 在 Windows 上通过端口查找并结束进程
+func killByPort(port int) error {
+    // 使用 netstat -ano 查找监听该端口的 PID
+    cmd := exec.Command("netstat", "-ano")
+    cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+    out, err := cmd.Output()
+    if err != nil {
+        return err
+    }
+    lines := strings.Split(string(out), "\n")
+    portStr := fmt.Sprintf(":%d", port)
+    var pid string
+    for _, line := range lines {
+        if strings.Contains(line, portStr) && strings.Contains(line, "LISTENING") {
+            f := strings.Fields(line)
+            if len(f) >= 5 {
+                pid = f[len(f)-1]
+                break
+            }
+        }
+    }
+    if pid == "" {
+        return nil
+    }
+    // 强制结束该 PID
+    tk := exec.Command("taskkill", "/F", "/PID", pid)
+    tk.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+    _ = tk.Run()
+    return nil
 }
 
 func getProjectStatus(id int, port int) string {
